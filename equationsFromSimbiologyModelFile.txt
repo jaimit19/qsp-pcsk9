@@ -1,0 +1,112 @@
+'ODEs:
+     d(hepatic_cholesterol)/dt = DietCholesterolAbsorption + CholesterolSynthesis - LDLFormation + LDLcleranceToHepatic - CholesterolLost + HDLclerance + LDLrIndependentCleranceToHepatic
+     d(LDLc)/dt = LDLFormation - LDLcleranceToHepatic - LDLcleranceToPeriphery - LDLrIndependentCleranceToHepatic - LDLrIndependentCleranceToPeriphery
+     d(circ_pcsk9)/dt = pcsk9_synthesis - pcsk9_clearance - binding
+     d(surface_LDLr)/dt = 1/antiPCSK9*(LDLr_expression - LDLr_clearance)
+     d(antipcsk9)/dt = absorption - binding - antipcsk9_clearance - distribution
+     d([antipcsk9 dose])/dt = -dose_compartment_clearance
+     d(complex)/dt = binding - complex_clearance
+     d(peripheral)/dt = -redistribution
+     
+     Fluxes:
+     DietCholesterolAbsorption = AbsorptionFraction*CholesterolIntakeDiet
+     CholesterolSynthesis = BaselineCholesterolSynthesisRate*StatinEffectOnCholesterolSynthesis
+     LDLFormation = LDLparticleProdRate*hepatic_cholesterol*circ_volume*LDLparticleCE
+     LDLcleranceToHepatic = LDLcClearanceRate*dilipidemic_index*LDLc*surface_LDLr*clearance_hepatic_fraction
+     CholesterolLost = LossRate*hepatic_cholesterol
+     HDLclerance = HDLcClearanceRate*HDLch*circ_volume*deciliter_to_liter*clearance_hepatic_fraction
+     LDLcleranceToPeriphery = LDLcClearanceRate*dilipidemic_index*LDLc*(1-clearance_hepatic_fraction)*surface_LDLr
+     pcsk9_synthesis = pcsk9SynthesisRate*SREBP2_reg(SREBP2,pcsk9_synthesis.Vm_up,pcsk9_synthesis.Km_up,pcsk9_synthesis.Vm_down,pcsk9_synthesis.Km_down)
+     pcsk9_clearance = pcsk9ClearanceRate*circ_pcsk9*(surface_LDLr/LDLr0)^gamma
+     LDLr_expression = LDLrSynthesis*SREBP2_reg(SREBP2,LDLr_expression.Vm_up,LDLr_expression.Km_up,LDLr_expression.Vm_down,LDLr_expression.Km_down)
+     LDLr_clearance = LDLrClearance*surface_LDLr*transform(circ_pcsk9_ngperml,cat(2,(1-pcsk9_on_LDLr),(1+pcsk9_on_LDLr)),Baselinepcsk9,pcsk9_on_LDLr_range,'lin')
+     absorption = ((PK_Ka*[antipcsk9 dose]/PK_V2_F)*(1000/150))*antiPCSK9
+     binding = PK_kon*antipcsk9*circ_pcsk9-PK_koff*complex
+     antipcsk9_clearance = PK_Kel_F*antipcsk9
+     complex_clearance = PK_ComplexClearanceRate*complex
+     dose_compartment_clearance = PK_Ka*[antipcsk9 dose]
+     distribution = PK_Q/PK_V2_F*(antipcsk9-peripheral)
+     redistribution = PK_Q/PK_V3*(peripheral-antipcsk9)
+     LDLrIndependentCleranceToHepatic = LDLrIndClearanceRate*clearance_hepatic_fraction*LDLc
+     LDLrIndependentCleranceToPeriphery = LDLrIndClearanceRate*(1-clearance_hepatic_fraction)*LDLc
+     
+     Repeated Assignments:
+     complex_ugperml = complex*224/1000
+     circ_pcsk9_ngperml = circ_pcsk9*74
+     total_pcsk9 = circ_pcsk9_ngperml+1000*(74/224)*complex_ugperml
+     logTotalpcsk9 = log10(total_pcsk9)
+     antipcsk9_ugperml = antipcsk9*150/1000
+     total_antipcsk9 = antipcsk9_ugperml+(150/224)*complex_ugperml
+     logPK = log10(total_antipcsk9)
+     LDLch = LDLc/(circ_volume*10)
+     LDLp = 100*(LDLch/LDLbaseline)
+     SREBP2 = transform(hepatic_cholesterol,cat(2,maxSREBP2level,minSREBP2level),baseline_hepatic_cholesterol,3)
+     
+     Parameter Values:
+     LDLparticleCE = 0.92
+     circ_volume = 5
+     clearance_hepatic_fraction = 0.8
+     baseline_hepatic_cholesterol = 6000
+     maxSREBP2level = 2
+     minSREBP2level = 0
+     LDLcClearanceRate = 0.187
+     deciliter_to_liter = 10
+     dilipidemic_index = 1
+     PK_Ka = 0.247
+     PK_Kel_F = 0.0443
+     PK_V2_F = 5640
+     PK_ComplexClearanceRate = 0.182
+     PK_kon = 0.84
+     PK_koff = 1.11
+     PK_V3 = 3990
+     PK_Q = 615
+     Baselinepcsk9 = 281.94
+     LDLrIndClearanceRate = 0.02
+     AbsorptionFraction = 0.5
+     CholesterolIntakeDiet = 300
+     StatinEffectOnCholesterolSynthesis = 1
+     BaselineCholesterolSynthesisRate = 800
+     LDLparticleProdRate = 0.03
+     LossRate = 0.23
+     HDLcClearanceRate = 0.3
+     pcsk9SynthesisRate = 9.4488
+     pcsk9_synthesis.Vm_up = 2
+     pcsk9_synthesis.Km_up = 1.5
+     pcsk9_synthesis.Vm_down = 0.7
+     pcsk9_synthesis.Km_down = 0.5
+     pcsk9ClearanceRate = 2.48
+     LDLr0 = 1
+     gamma = 0
+     LDLrSynthesis = 0.5
+     LDLr_expression.Vm_up = 3
+     LDLr_expression.Km_up = 1.5
+     LDLr_expression.Vm_down = 0.7
+     LDLr_expression.Km_down = 0.5
+     LDLrClearance = 0.5
+     pcsk9_on_LDLr = 0.75
+     pcsk9_on_LDLr_range = 650
+     antiPCSK9 = 1
+     SREBP2 = 1
+     LDLch = 80
+     antipcsk9_ugperml = 1.5e-05
+     circ_pcsk9_ngperml = 281.94
+     complex_ugperml = 0
+     total_antipcsk9 = 1.5e-05
+     total_pcsk9 = 281.94
+     LDLp = 100
+     logPK = -4.8239
+     logTotalpcsk9 = 2.4502
+     
+     Initial Conditions:
+     hepatic_cholesterol = 6000
+     LDLc = 4000
+     circ_pcsk9 = 3.81
+     surface_LDLr = 1
+     antipcsk9 = 0.0001
+     [antipcsk9 dose] = 0
+     complex = 0
+     peripheral = 0
+     HDLch = 50
+     LDLbaseline = 80
+     
+     '
