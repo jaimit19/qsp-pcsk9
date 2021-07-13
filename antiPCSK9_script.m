@@ -1,4 +1,9 @@
 tic;
+
+parameters = antiPCSK9modelPars();
+IC = getInitialConditions();
+t0 = 0; tfinal = 100;
+[T,Y] = ode15s(@(t, y)odefun(t, y, parameters),linspace(t0, tfinal, 1000),IC);
 toc;
 
 % Parameters of the antiPCKS9 model
@@ -22,14 +27,13 @@ p.PK_V3  = 3990; %      milliliter
 p.PK_Q   = 615; %       milliliter/day     
 p.Baselinepcsk9  = 281.94; %    nanogram/milliliter
 p.LDLrIndClearanceRate = 0.02;       
-
 p.AbsorptionFraction = 0.5;
 p.CholesterolIntakeDiet = 300;
 p.StatinEffectOnCholesterolSynthesis = 1;
 p.BaselineCholesterolSynthesisRate = 800;
 p.LDLparticleProdRate = 0.03;
 p.LossRate = 0.23;
-p.HDLcClearanceRate = 0.3;
+p.HDLcClearanceRate = 0.3; % / day
 p.pcsk9SynthesisRate = 9.4488;
 p.pcsk9_synthesis.Vm_up = 2;
 p.pcsk9_synthesis.Km_up = 1.5;
@@ -46,35 +50,23 @@ p.LDLr_expression.Km_down = 0.5;
 p.LDLrClearance = 0.5;
 p.pcsk9_on_LDLr = 0.75;
 p.pcsk9_on_LDLr_range = 650;
-p.antiPCSK9 = 1;
 p.SREBP2 = 1;
 p.circ_pcsk9_ngperml = 281.94;
-%      LDLch = 80
-%      antipcsk9_ugperml = 1.5e-05
-%      complex_ugperml = 0
-%      total_antipcsk9 = 1.5e-05
-%      total_pcsk9 = 281.94
-%      LDLp = 100
-%      logPK = -4.8239
-%      logTotalpcsk9 = 2.4502
+p.HDLch = 50;
 end
 
-function IC = getIntitialConditions()
+function IC = getInitialConditions()
 hepatic_cholesterol = 6000;
 LDLc = 4000;
 circ_pcsk9 = 3.81;
 surface_LDLr = 1;
 antipcsk9 = 0.0001;
-antipcsk9_dose = 0;
+antipcsk9_dose =400000;
 complex = 0;
 peripheral = 0;
-% HDLch = 50;
-% LDLbaseline = 80;
 IC = [hepatic_cholesterol, LDLc, circ_pcsk9, surface_LDLr, ...
     antipcsk9, antipcsk9_dose, complex, peripheral]; %...
-    %HDLch, LDLbaseline];
 end
-
 
 function dydt = odefun(t,y,p)
 dydt = zeros(length(y), 1);
@@ -91,7 +83,7 @@ peripheral = y(8);
 
 SREBP2 = transform(hepatic_cholesterol,...
     cat(2, p.maxSREBP2level, p.minSREBP2level), ...
-    p.baseline_hepatic_cholesterol, 3)';
+    p.baseline_hepatic_cholesterol, 3);
     
 % Fluxes
 DietCholesterolAbsorption = p.AbsorptionFraction * p.CholesterolIntakeDiet;
@@ -107,7 +99,7 @@ LDLcleranceToHepatic = p.LDLcClearanceRate * p.dilipidemic_index *...
 
 CholesterolLost = p.LossRate * hepatic_cholesterol;
 
-HDLclerance = p.HDLcClearanceRate * HDLch * p.circ_volume * p.deciliter_to_liter...
+HDLclerance = p.HDLcClearanceRate * p.HDLch * p.circ_volume * p.deciliter_to_liter...
     * p.clearance_hepatic_fraction;
 
 LDLcleranceToPeriphery = p.LDLcClearanceRate * p.dilipidemic_index * LDLc * (1- ...
@@ -123,17 +115,15 @@ pcsk9_synthesis = p.pcsk9SynthesisRate* SREBP2_reg(SREBP2,...
 pcsk9_clearance = p.pcsk9ClearanceRate * circ_pcsk9 ...
     * (surface_LDLr / p.LDLr0)^p.gamma;
 
-%??
 LDLr_expression = p.LDLrSynthesis * SREBP2_reg(SREBP2, ...
     p.LDLr_expression.Vm_up, p.LDLr_expression.Km_up, ...
     p.LDLr_expression.Vm_down, p.LDLr_expression.Km_down);
 
-LDLr_clearance = LDLrClearance * surface_LDLr * ...
+LDLr_clearance = p.LDLrClearance * surface_LDLr * ...
     transform(p.circ_pcsk9_ngperml, cat(2,(1 - p.pcsk9_on_LDLr), (1 + p.pcsk9_on_LDLr)), ...
     p.Baselinepcsk9, p.pcsk9_on_LDLr_range,'lin');
 
-absorption = ((p.PK_Ka * antipcsk9_dose / p.PK_V2_F) * (1000 / 150) ) ...
-    * antiPCSK9;
+absorption = ((p.PK_Ka * antipcsk9_dose / p.PK_V2_F) * (1000 / 150) ) ;
 
 binding = p.PK_kon * antipcsk9 * circ_pcsk9 - p.PK_koff * complex;
 
@@ -165,7 +155,7 @@ dLDLc_dt = LDLFormation - LDLcleranceToHepatic - ...
 
 dcirc_pcsk9_dt = pcsk9_synthesis - pcsk9_clearance - binding;
 
-dsurface_LDLr_dt = 1/p.antiPCSK9 * (LDLr_expression - LDLr_clearance);
+dsurface_LDLr_dt =  (LDLr_expression - LDLr_clearance);
 
 dantipcsk9_dt = absorption - binding - antipcsk9_clearance - distribution;
 
@@ -187,7 +177,6 @@ dydt(8) = dperipheral_dt;
 
 end
 
-
 function [Yout] = SREBP2_reg(SREBP2,Vmax_up, Km_up, Vmax_down, Km_down)
 
 if ( SREBP2 >= 1 )
@@ -201,7 +190,6 @@ if ( SREBP2 < 1 )
 end
  
 end
-
 
 function [Yout] = transform(Xin,Yrange,Xic50,varargin)
 
