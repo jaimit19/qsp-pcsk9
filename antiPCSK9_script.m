@@ -1,10 +1,53 @@
-tic;
-
+% 1. Running Standard ODE based model
 parameters = antiPCSK9modelPars();
 IC = getInitialConditions();
 t0 = 0; tfinal = 100;
 [T,Y] = ode15s(@(t, y)odefun(t, y, parameters),linspace(t0, tfinal, 1000),IC);
-toc;
+
+% 2. Running Simbiology model
+
+sbioloadproject('antiPCSK9_gadkar.sbproj', 'm1') ;
+cs = getconfigset(m1);
+DoseGroup_Index=5; 
+SimTime=100;  % This is the simulation end time
+cs.StopTime=SimTime;
+set(cs.SolverOptions, 'OutputTimes',0:SimTime)
+DoseVar=m1.Dose(DoseGroup_Index);
+simData = sbiosimulate(m1, cs,DoseVar);
+[T1,X1] = selectbyname(simData, {'LDLc','antipcsk9 dose', 'peripheral', ...
+    'circ_pcsk9','surface_LDLr', 'antipcsk9', 'hepatic_cholesterol',...
+    'complex'});
+
+
+% Comparison
+
+f = figure();
+subplot(3, 3, 1); plot(T, Y(:, 2), 'Linewidth', 2); hold on; 
+plot(T1, X1(:, 1), '--', 'Linewidth', 2);
+xlabel('Time'); ylabel('LDLc');
+subplot(3, 3, 2); plot(T, Y(:, 6), 'Linewidth', 2); hold on; 
+plot(T1, X1(:, 2), '--', 'Linewidth', 2);
+xlabel('Time'); ylabel('antiPCKS9 dose');
+subplot(3, 3, 3); plot(T, Y(:, 8), 'Linewidth', 2); hold on;
+plot(T1, X1(:, 3), '--', 'Linewidth', 2);
+xlabel('Time'); ylabel('peripheral');
+subplot(3, 3, 4); plot(T, Y(:, 3), 'Linewidth', 2); hold on; 
+plot(T1, X1(:, 4), '--', 'Linewidth', 2);
+xlabel('Time'); ylabel('circ_{pck9}');
+subplot(3, 3, 5); plot(T, Y(:, 4), 'Linewidth', 2); hold on; 
+plot(T1, X1(:, 5), '--', 'Linewidth', 2);
+xlabel('Time'); ylabel('surface_{LDLr}');
+subplot(3, 3, 6); plot(T, Y(:, 5), 'Linewidth', 2); hold on; 
+plot(T1, X1(:, 6), '--', 'Linewidth', 2);
+xlabel('Time'); ylabel('antiPCKS9');
+subplot(3, 3, 7); plot(T, Y(:, 1), 'Linewidth', 2); hold on; 
+plot(T1, X1(:, 7), '--', 'Linewidth', 2);
+xlabel('Time'); ylabel('hepatic_{cholesterol}');
+subplot(3, 3, 8); plot(T, Y(:, 7), 'Linewidth', 2); hold on; 
+plot(T1, X1(:, 8), '--', 'Linewidth', 2);
+xlabel('Time'); ylabel('complex');
+%% Helper functions
+
 
 % Parameters of the antiPCKS9 model
 function p =  antiPCSK9modelPars()
@@ -51,7 +94,7 @@ p.LDLrClearance = 0.5;
 p.pcsk9_on_LDLr = 0.75;
 p.pcsk9_on_LDLr_range = 650;
 p.SREBP2 = 1;
-p.circ_pcsk9_ngperml = 281.94;
+%p.circ_pcsk9_ngperml = 281.94;
 p.HDLch = 50;
 end
 
@@ -84,6 +127,7 @@ peripheral = y(8);
 SREBP2 = transform(hepatic_cholesterol,...
     cat(2, p.maxSREBP2level, p.minSREBP2level), ...
     p.baseline_hepatic_cholesterol, 3);
+circ_pcsk9_ngperml = circ_pcsk9 * 74;
     
 % Fluxes
 DietCholesterolAbsorption = p.AbsorptionFraction * p.CholesterolIntakeDiet;
@@ -120,8 +164,10 @@ LDLr_expression = p.LDLrSynthesis * SREBP2_reg(SREBP2, ...
     p.LDLr_expression.Vm_down, p.LDLr_expression.Km_down);
 
 LDLr_clearance = p.LDLrClearance * surface_LDLr * ...
-    transform(p.circ_pcsk9_ngperml, cat(2,(1 - p.pcsk9_on_LDLr), (1 + p.pcsk9_on_LDLr)), ...
+    transform(circ_pcsk9_ngperml,...
+    cat(2,(1 - p.pcsk9_on_LDLr), (1 + p.pcsk9_on_LDLr)), ...
     p.Baselinepcsk9, p.pcsk9_on_LDLr_range,'lin');
+
 
 absorption = ((p.PK_Ka * antipcsk9_dose / p.PK_V2_F) * (1000 / 150) ) ;
 
@@ -155,7 +201,7 @@ dLDLc_dt = LDLFormation - LDLcleranceToHepatic - ...
 
 dcirc_pcsk9_dt = pcsk9_synthesis - pcsk9_clearance - binding;
 
-dsurface_LDLr_dt =  (LDLr_expression - LDLr_clearance);
+dsurface_LDLr_dt = (LDLr_expression - LDLr_clearance);
 
 dantipcsk9_dt = absorption - binding - antipcsk9_clearance - distribution;
 
@@ -175,45 +221,4 @@ dydt(6) = dantipcsk9_dose_dt;
 dydt(7) = dcomplex_dt ;
 dydt(8) = dperipheral_dt;
 
-end
-
-function [Yout] = SREBP2_reg(SREBP2,Vmax_up, Km_up, Vmax_down, Km_down)
-
-if ( SREBP2 >= 1 )
-    In = (SREBP2-1);
-    Yout = 1 + (Vmax_up-1) * In / (In + (Km_up-1)); 
-end
-
-if ( SREBP2 < 1 )
-    In = (1-SREBP2);
-    Yout = 1 - Vmax_down * In / (In + Km_down); 
-end
- 
-end
-
-function [Yout] = transform(Xin,Yrange,Xic50,varargin)
-
-nVarargs = length(varargin);
-Xscale='log'; % default is log
-Xrange=3;     % log-order if log; actual range if linear
-if (nVarargs==1) 
-    Xrange=varargin{1}; 
-end
-if (nVarargs==2)
-    Xrange=varargin{1}; Xscale=varargin{2};
-end
-
-if strcmp(Xscale,'log')
-    expT=3.97865*Xrange^-0.995; % This is fitted to give 99% output at the extreme of the range specified
-    Yout=( Yrange(2) - Yrange(1) ) * (Xin^expT/(Xin^expT+Xic50^expT)) + Yrange(1);
-end
-
- if strcmp(Xscale,'lin')
-    Xmin=Xic50-Xrange/2;Xmax=Xic50+Xrange/2;
-    expT=3.97865*2^-0.995; % optimized for range of -1 to 1;
-    Xmod=10^( 2*(Xin-Xmin)/(Xmax-Xmin) -1 )  ; 
-    Xmodic50=10^( 2*(Xic50-Xmin)/(Xmax-Xmin) -1 );  
-    Yout=( Yrange(2) - Yrange(1) ) * (Xmod^expT/(Xmod^expT+Xmodic50^expT)) + Yrange(1);
- end
- 
 end
